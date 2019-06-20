@@ -1,8 +1,8 @@
 import json
 
-from flask import Flask, jsonify
-from flask_restful import Api, Resource
 
+from flask import Flask, jsonify
+from flask_restful import Api, Resource, reqparse
 
 app = Flask(__name__)
 api = Api(app)
@@ -12,8 +12,10 @@ with open('mock_data.json', "r") as file:
     all_movies = json.load(file)
 
 
-def response_builder(data, status_code=200):
-    """Build the jsonified response to return."""
+def response_builder(data, status_code):
+    """
+    Build the jsonified response to return.
+    """
     response = jsonify(data)
     response.status_code = status_code
     return response
@@ -21,45 +23,61 @@ def response_builder(data, status_code=200):
 
 class MovieAPI(Resource):
     """
-    Get all movies by ID if provided
+    Get all movies by ID if provided.
+    Get all movies matching the search term provided.
     """
 
     def get(self, id=None):
+        parser = reqparse.RequestParser()
+        parser.add_argument('q')
+        args = parser.parse_args()
+        query = args['q']
         if id:
-            movie_ids = []
+            movie_id = []
             for movie in all_movies:
                 for key, value in movie.items():
                     if id == movie["id"]:
-                        movie_ids.append(movie)
+                        movie_id.append(movie)
+                        break
 
-            if len(movie_ids) < 1:
+            if not movie_id:
                 return response_builder({
-                    "message": "No movie with that Id was found",
+                    'error': 'No movie with that Id was found'
                 }, 404)
             else:
                 return response_builder({
-                    "movie": movie_ids[0]
+                    'movie': movie_id
                 }, 200)
+        elif query:
+            search_results = []
+            for movie in all_movies:
+                movie_genre = movie.get('genre')
+                movie_name = movie.get('name')
+                if query.lower() in movie_genre.lower()\
+                        or query.lower() in movie_name.lower():
+                    search_results.append(movie)
+            if not search_results:
+                return response_builder({
+                    'error': 'No movies match the genre or name provided'
+                }, 400)
+            else:
+                return response_builder(
+                    {
+                        'movies': search_results
+                    }, 200)
         else:
             list_movies = []
-            for movie in all_movies:
-                list_movies.append({
-                    'id': movie["id"],
-                    "name": movie["name"],
-                    "showing_time": movie["showing_time"],
-                    "duration": movie["duration"],
-                    "genre": movie["genre"],
-                    "release_date": movie["release_date"],
-                })
-            return response_builder(
-                {
-                    "movies": all_movies,
-                }, 200
-            )
-            if not all_movies:
+            for movies in all_movies:
+                list_movies.append(movies)
+            if not movies:
                 return response_builder({
-                    "message": "No movies in the system currently.",
-                }, 400)
+                    'error': 'No movies currently in the system.'
+                }, 204)
+            else:
+                return response_builder(
+                    {
+                        'movies': all_movies
+                    }, 200)
 
 
-api.add_resource(MovieAPI, '/movies/<int:id>', '/movies', endpoint="movie")
+api.add_resource(MovieAPI, '/movies/<int:id>', '/movies')
